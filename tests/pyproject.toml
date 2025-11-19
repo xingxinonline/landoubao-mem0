@@ -1,0 +1,10 @@
+[project]
+name = "mem0-tests"
+version = "0.1.0"
+description = "Test scripts for Mem0 Docker deployment"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["requests"]
+
+[project.optional-dependencies]
+dev = []

@@ -1,0 +1,18 @@
+[project]
+name = "mem0-docker"
+version = "0.1.0"
+description = "Custom Mem0 Deployment with Zhipu AI and ModelArk"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mem0ai",
+    "fastapi",
+    "uvicorn",
+    "qdrant-client",
+    "openai",
+    "pydantic",
+    "requests",
+]
+
+[tool.uv]
+dev-dependencies = []
