@@ -1,4 +1,5 @@
 import os
+import re
 import uvicorn
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -30,6 +31,102 @@ EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "https://ai.gitee.com/v1")
 # API Keys
 ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY", "your_zhipu_key")
 MODELARK_API_KEY = os.getenv("MODELARK_API_KEY", "your_modelark_key")
+
+# ============= Language Detection and Adaptive Prompts =============
+
+# Language detection patterns
+LANGUAGE_PATTERNS = {
+    'zh': re.compile(r'[\u4e00-\u9fff]'),  # Chinese characters
+    'ja': re.compile(r'[\u3040-\u309f\u30a0-\u30ff]'),  # Japanese hiragana/katakana
+    'ko': re.compile(r'[\uac00-\ud7af]'),  # Korean Hangul
+    'ar': re.compile(r'[\u0600-\u06ff]'),  # Arabic
+    'ru': re.compile(r'[а-яА-ЯёЁ]'),  # Russian Cyrillic
+    'th': re.compile(r'[\u0e00-\u0e7f]'),  # Thai
+}
+
+LANGUAGE_PROMPTS = {
+    'zh': """提取以下中文内容中的关键事实。重要：所有事实必须用中文写出！
+从给定的文本中提取具体的、可验证的事实。每个事实应该是：
+- 简洁的中文陈述
+- 现在时或一般时
+- 避免冗余
+
+例如，如果输入是"我叫李四，是个工程师"，则应提取为：
+- 名字是李四
+- 是工程师
+
+现在，请从以下内容中提取事实，用中文表达：""",
+    'en': """You are a fact extraction expert. Extract key facts from user input.
+Requirements:
+1. Extract facts in concise English
+2. Each fact should be a simple statement
+3. Use present tense or general tense
+4. Avoid redundant information
+""",
+    'ja': """あなたは事実抽出の専門家です。ユーザー入力から重要な事実を抽出してください。
+要件：
+1. 簡潔な日本語で事実を抽出してください
+2. 各事実は単純なステートメントである必要があります
+3. 現在時制または一般的な時制を使用してください
+4. 冗長な情報は避けてください
+""",
+    'ko': """당신은 사실 추출 전문가입니다. 사용자 입력에서 핵심 사실을 추출하십시오.
+요구사항:
+1. 간결한 한국어로 사실을 추출하십시오
+2. 각 사실은 단순한 설명이어야 합니다
+3. 현재 시제를 사용하십시오
+4. 중복되는 정보는 피하십시오
+""",
+    'ar': """أنت خبير استخراج الحقائق. استخرج الحقائق الرئيسية من مدخلات المستخدم.
+المتطلبات:
+1. استخرج الحقائق بلغة عربية موجزة
+2. يجب أن تكون كل حقيقة بيانًا بسيطًا
+3. استخدم الوقت الحالي أو الزمن العام
+4. تجنب المعلومات المكررة
+""",
+    'ru': """Вы эксперт по извлечению фактов. Извлеките ключевые факты из пользовательского ввода.
+Требования:
+1. Извлекайте факты на кратком русском языке
+2. Каждый факт должен быть простым утверждением
+3. Используйте настоящее время или общее время
+4. Избегайте избыточной информации
+""",
+    'th': """คุณเป็นผู้เชี่ยวชาญในการสกัดข้อเท็จจริง สกัดข้อเท็จจริงที่สำคัญจากอินพุตของผู้ใช้
+ข้อกำหนด:
+1. สกัดข้อเท็จจริงในภาษาไทยที่กระชับ
+2. ข้อเท็จจริงแต่ละอย่างควรเป็นข้อความอย่างง่าย
+3. ใช้กาลปัจจุบันหรือกาลทั่วไป
+4. หลีกเลี่ยงข้อมูลที่ซ้ำซ้อน
+""",
+}
+
+def detect_language(text: str) -> str:
+    """
+    Detect the language of input text based on character patterns.
+    Returns language code: 'zh', 'en', 'ja', 'ko', 'ar', 'ru', 'th', etc.
+    Default to 'en' if no specific pattern matches.
+    """
+    if not text or not isinstance(text, str):
+        return 'en'
+    
+    # Count character occurrences for each language
+    language_scores = {}
+    for lang, pattern in LANGUAGE_PATTERNS.items():
+        matches = len(pattern.findall(text))
+        if matches > 0:
+            language_scores[lang] = matches
+    
+    # Return the language with the most matches
+    if language_scores:
+        detected_lang = max(language_scores, key=language_scores.get)
+        return detected_lang
+    
+    # Default to English if no specific pattern matches
+    return 'en'
+
+def get_system_prompt(language: str) -> str:
+    """Get the system prompt for a specific language."""
+    return LANGUAGE_PROMPTS.get(language, LANGUAGE_PROMPTS['en'])
 
 # ============= Build Mem0 Configuration Dictionary =============
 config = {
@@ -100,6 +197,7 @@ class AddMemoryRequest(BaseModel):
     agent_id: Optional[str] = None
     run_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    language: Optional[str] = None  # Auto-detected if not provided
 
 class SearchMemoryRequest(BaseModel):
     query: str
@@ -140,20 +238,45 @@ def health_check():
 @app.post("/memories", status_code=201)
 def add_memory(request: AddMemoryRequest):
     """
-    Add a new memory.
+    Add a new memory with auto-detected language support.
+    The system detects the input language and generates facts in the same language.
     """
     if m is None:
         raise HTTPException(status_code=503, detail="Mem0 not initialized")
     
     try:
-        # Convert Pydantic models to dicts
-        msgs = [msg.model_dump() for msg in request.messages]
+        # Detect language from messages
+        combined_text = " ".join([msg.content for msg in request.messages])
+        detected_lang = detect_language(combined_text) if not request.language else request.language
+        system_prompt = get_system_prompt(detected_lang)
+        
+        # Create enhanced messages with language-aware instructions
+        # Inject the system prompt as a user message to influence fact extraction
+        enhanced_messages = []
+        
+        # For the first message, prepend the language instruction
+        if request.messages:
+            first_msg = request.messages[0]
+            enhanced_content = f"{system_prompt}\n\n[用户输入]\n{first_msg.content}" if detected_lang == 'zh' else f"{system_prompt}\n\n[User Input]\n{first_msg.content}"
+            enhanced_messages.append({
+                "role": "user",
+                "content": enhanced_content
+            })
+            
+            # Add remaining messages as-is
+            for msg in request.messages[1:]:
+                enhanced_messages.append(msg.model_dump())
+        
+        # Use global Mem0 instance with enhanced messages
         result = m.add(
-            messages=msgs,
+            messages=enhanced_messages,
             user_id=request.user_id,
             agent_id=request.agent_id,
             run_id=request.run_id,
-            metadata=request.metadata
+            metadata={
+                **(request.metadata or {}),
+                "detected_language": detected_lang
+            }
         )
         return result
     except Exception as e:
