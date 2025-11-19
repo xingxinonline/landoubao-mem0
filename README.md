@@ -28,12 +28,26 @@ The server will start at `http://localhost:8000`.
 
 ## API Endpoints
 
--   **POST /memories**: Add a memory.
--   **POST /memories/search**: Search memories.
--   **GET /memories**: Get all memories.
--   **DELETE /memories/{memory_id}**: Delete a memory.
+-   **POST /memories**: Add a memory with automatic language detection and language-aware fact extraction.
+-   **POST /memories/search**: Search memories (supports cross-language search via vector embeddings).
+-   **GET /memories**: Get all memories for a user.
+-   **DELETE /memories/{memory_id}**: Delete a specific memory.
 -   **DELETE /memories?user_id={user_id}**: Reset memories for a user.
--   **GET /health**: Health check.
+-   **GET /health**: Health check with Mem0 initialization status.
+
+### Language Support
+
+The system automatically detects input language and extracts facts in the same language:
+
+- **中文 (Chinese)** - 自动提取中文事实
+- **English** - Automatically extracts English facts
+- **日本語 (Japanese)** - 日本語で事実を抽出
+- **한국어 (Korean)** - 한국어로 사실 추출
+- **العربية (Arabic)** - استخراج الحقائق بالعربية
+- **Русский (Russian)** - Извлечение фактов на русском
+- **ไทย (Thai)** - สกัดข้อเท็จจริงในภาษาไทย
+
+See [MULTILINGUAL_FACTS.md](./MULTILINGUAL_FACTS.md) for detailed multilingual usage examples.
 
 ## API Documentation
 
