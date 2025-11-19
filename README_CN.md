@@ -21,25 +21,37 @@
 - 智谱 AI API Key
 - 模力方舟 API Key
 
-### 1. 配置 API Keys 和嵌入模型
+### 1. 配置所有环境变量
 
-编辑 `app/.env` 文件：
+编辑 `app/.env` 文件，配置 API Keys 和各个组件参数：
 
 ```env
+# ========== API Keys ==========
 ZHIPU_API_KEY=your_zhipu_api_key
 MODELARK_API_KEY=your_modelark_api_key
+
+# ========== Qdrant Vector Store ==========
 QDRANT_HOST=115.190.24.157
 QDRANT_PORT=6333
 
-# 嵌入模型配置（可选）
-# 使用 Qwen3-Embedding-0.6B 以降低 Qdrant 资源占用（推荐用于生产环境）
-EMBEDDING_MODEL=Qwen3-Embedding-0.6B
-EMBEDDING_DIMS=1024
+# ========== LLM Configuration (Zhipu AI) ==========
+LLM_PROVIDER=openai
+LLM_MODEL=glm-4-flash-250414
+LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+LLM_TEMPERATURE=0.7          # 生成温度 (0-2, 越高越创意)
+LLM_MAX_TOKENS=2000          # 最大生成标记数
 
-# 或使用 Qwen3-Embedding-8B 获得更高的嵌入质量（需要更多资源）
-# EMBEDDING_MODEL=Qwen3-Embedding-8B
-# EMBEDDING_DIMS=4096
+# ========== Embedding Configuration (ModelArk) ==========
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL=Qwen3-Embedding-0.6B    # 或 Qwen3-Embedding-8B
+EMBEDDING_DIMS=1024                      # 对应 0.6B 使用 1024，8B 使用 4096
+EMBEDDING_BASE_URL=https://ai.gitee.com/v1
 ```
+
+**默认配置说明：**
+- LLM：智谱 AI 的 `glm-4-flash-250414` 模型，温度 0.7（平衡创意和稳定性）
+- Embedding：推荐使用 `Qwen3-Embedding-0.6B` 以降低 Qdrant 资源占用
+- 所有参数都可根据需要调整
 
 ### 2. 启动服务
 
@@ -140,6 +152,7 @@ POST /admin/reset-collections
 ### 切换嵌入模型步骤
 
 ```bash
+```bash
 # 1. 编辑 app/.env
 # EMBEDDING_MODEL=Qwen3-Embedding-8B
 # EMBEDDING_DIMS=4096
@@ -153,6 +166,36 @@ docker-compose restart
 # 4. 等待 Mem0 重新初始化（观察日志）
 docker-compose logs -f mem0-server
 ```
+
+## 环境变量完整参考
+
+### API Keys 和连接
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| `ZHIPU_API_KEY` | 无 | 智谱 AI API Key |
+| `MODELARK_API_KEY` | 无 | 模力方舟 API Key |
+| `QDRANT_HOST` | `115.190.24.157` | Qdrant 服务器地址 |
+| `QDRANT_PORT` | `6333` | Qdrant 端口 |
+
+### LLM 配置（智谱 AI）
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| `LLM_PROVIDER` | `openai` | LLM 供应商（OpenAI 兼容） |
+| `LLM_MODEL` | `glm-4-flash-250414` | 使用的 LLM 模型 |
+| `LLM_BASE_URL` | `https://open.bigmodel.cn/api/paas/v4` | 智谱 AI API 端点 |
+| `LLM_TEMPERATURE` | `0.7` | 生成温度（0-2，越高越创意） |
+| `LLM_MAX_TOKENS` | `2000` | 最大生成标记数 |
+
+### Embedding 配置（模力方舟）
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| `EMBEDDING_PROVIDER` | `openai` | Embedding 供应商（OpenAI 兼容） |
+| `EMBEDDING_MODEL` | `Qwen3-Embedding-0.6B` | 使用的 Embedding 模型 |
+| `EMBEDDING_DIMS` | `1024` | Embedding 输出维度（0.6B=1024，8B=4096） |
+| `EMBEDDING_BASE_URL` | `https://ai.gitee.com/v1` | 模力方舟 API 端点 |
 
 ## 测试
 

@@ -8,36 +8,55 @@ from mem0 import Memory
 # Initialize FastAPI app
 app = FastAPI(title="Mem0 API Server", description="Custom Mem0 Deployment with Zhipu AI and ModelArk")
 
-# Configuration with environment variable support
-# Embedding model configuration
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "Qwen3-Embedding-0.6B")
-EMBEDDING_DIMS = int(os.getenv("EMBEDDING_DIMS", 1024))
+# ============= Configuration with environment variable support =============
 
+# Vector Store Configuration
+QDRANT_HOST = os.getenv("QDRANT_HOST", "115.190.24.157")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+
+# LLM Configuration (Zhipu AI)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+LLM_MODEL = os.getenv("LLM_MODEL", "glm-4-flash-250414")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))
+
+# Embedding Configuration (ModelArk)
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "Qwen3-Embedding-0.6B")
+EMBEDDING_DIMS = int(os.getenv("EMBEDDING_DIMS", "1024"))
+EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "https://ai.gitee.com/v1")
+
+# API Keys
+ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY", "your_zhipu_key")
+MODELARK_API_KEY = os.getenv("MODELARK_API_KEY", "your_modelark_key")
+
+# ============= Build Mem0 Configuration Dictionary =============
 config = {
     "vector_store": {
         "provider": "qdrant",
         "config": {
-            "host": os.getenv("QDRANT_HOST", "115.190.24.157"),
-            "port": int(os.getenv("QDRANT_PORT", 6333)),
+            "host": QDRANT_HOST,
+            "port": QDRANT_PORT,
             "embedding_model_dims": EMBEDDING_DIMS
         }
     },
     "llm": {
-        "provider": "openai",
+        "provider": LLM_PROVIDER,
         "config": {
-            "model": "glm-4-flash-250414",
-            "api_key": os.getenv("ZHIPU_API_KEY", "your_zhipu_key"),
-            "openai_base_url": "https://open.bigmodel.cn/api/paas/v4",
-            "temperature": 0.7,
-            "max_tokens": 2000
+            "model": LLM_MODEL,
+            "api_key": ZHIPU_API_KEY,
+            "openai_base_url": LLM_BASE_URL,
+            "temperature": LLM_TEMPERATURE,
+            "max_tokens": LLM_MAX_TOKENS
         }
     },
     "embedder": {
-        "provider": "openai",
+        "provider": EMBEDDING_PROVIDER,
         "config": {
             "model": EMBEDDING_MODEL,
-            "api_key": os.getenv("MODELARK_API_KEY", "your_modelark_key"),
-            "openai_base_url": "https://ai.gitee.com/v1",
+            "api_key": MODELARK_API_KEY,
+            "openai_base_url": EMBEDDING_BASE_URL,
             "embedding_dims": EMBEDDING_DIMS
         }
     }
@@ -51,12 +70,11 @@ def initialize_mem0():
     global m, initialization_error
     try:
         print(f"Initializing Mem0 with config...")
-        print(f"  - Qdrant Host: {config['vector_store']['config']['host']}")
-        print(f"  - Qdrant Port: {config['vector_store']['config']['port']}")
-        print(f"  - LLM Provider: {config['llm']['provider']}")
-        print(f"  - LLM Model: {config['llm']['config'].get('model', 'N/A')}")
-        print(f"  - Embedder Provider: {config['embedder']['provider']}")
-        print(f"  - Embedder Model: {config['embedder']['config'].get('model', 'N/A')}")
+        print(f"  - Qdrant Host: {QDRANT_HOST}:{QDRANT_PORT}")
+        print(f"  - LLM Provider: {LLM_PROVIDER} | Model: {LLM_MODEL} | URL: {LLM_BASE_URL}")
+        print(f"  - LLM Temperature: {LLM_TEMPERATURE} | Max Tokens: {LLM_MAX_TOKENS}")
+        print(f"  - Embedder Provider: {EMBEDDING_PROVIDER} | Model: {EMBEDDING_MODEL}")
+        print(f"  - Embedding Dims: {EMBEDDING_DIMS} | URL: {EMBEDDING_BASE_URL}")
         
         m = Memory.from_config(config)
         print("✓ Mem0 initialized successfully with custom config.")
