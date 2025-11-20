@@ -16,3 +16,4 @@ uv run test_api.py
 ```
 
 `uv` will automatically create a virtual environment and install the required dependencies (`requests`) defined in `pyproject.toml`.
+重新执行重启命令
