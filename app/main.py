@@ -1,6 +1,8 @@
 import os
 import re
 import uvicorn
+import uuid
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -210,6 +212,32 @@ class SearchMemoryRequest(BaseModel):
 class MemoryResponse(BaseModel):
     results: List[Dict[str, Any]]
 
+# ============= User Session Management Models =============
+
+class UserSessionInfo(BaseModel):
+    """Store information about a user session."""
+    user_id: str
+    created_at: str
+    last_activity: str
+    conversation_turns: int = 0
+    languages: List[str] = []
+    total_memories: int = 0
+    metadata: Optional[Dict[str, Any]] = None
+
+class CreateUserSessionRequest(BaseModel):
+    """Request to create a new user session."""
+    metadata: Optional[Dict[str, Any]] = None
+
+class ConversationTurnRequest(BaseModel):
+    """Request to record a conversation turn."""
+    user_id: str
+    message_content: str
+    language: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+# In-memory user session store (in production, use a database)
+user_sessions: Dict[str, Dict[str, Any]] = {}
+
 # Endpoints
 
 @app.get("/")
@@ -348,6 +376,184 @@ def delete_all_memories(user_id: str):
     try:
         m.reset(user_id=user_id)
         return {"status": "success", "message": f"All memories for user {user_id} deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============= User Session Management Endpoints =============
+
+@app.post("/users/session", status_code=201)
+def create_user_session(request: Optional[CreateUserSessionRequest] = None):
+    """
+    Create a new user session with a unique UUID.
+    This initializes tracking for a new user.
+    """
+    user_id = str(uuid.uuid4())
+    now = datetime.now().isoformat()
+    
+    user_sessions[user_id] = {
+        "user_id": user_id,
+        "created_at": now,
+        "last_activity": now,
+        "conversation_turns": 0,
+        "languages": [],
+        "total_memories": 0,
+        "metadata": (request.metadata if request else None) or {}
+    }
+    
+    return {
+        "status": "success",
+        "user_id": user_id,
+        "message": "User session created successfully",
+        "created_at": now
+    }
+
+@app.get("/users/{user_id}/session")
+def get_user_session(user_id: str):
+    """
+    Get information about a specific user session.
+    """
+    if user_id not in user_sessions:
+        raise HTTPException(status_code=404, detail=f"User session {user_id} not found")
+    
+    return user_sessions[user_id]
+
+@app.post("/users/{user_id}/conversation-turn")
+def record_conversation_turn(user_id: str, request: ConversationTurnRequest):
+    """
+    Record a conversation turn for a user.
+    Automatically adds the message to memory and updates session info.
+    """
+    if m is None:
+        raise HTTPException(status_code=503, detail="Mem0 not initialized")
+    
+    # Ensure user session exists, create if not
+    if user_id not in user_sessions:
+        user_sessions[user_id] = {
+            "user_id": user_id,
+            "created_at": datetime.now().isoformat(),
+            "last_activity": datetime.now().isoformat(),
+            "conversation_turns": 0,
+            "languages": [],
+            "total_memories": 0,
+            "metadata": {}
+        }
+    
+    try:
+        # Detect language from message
+        detected_lang = detect_language(request.message_content) if not request.language else request.language
+        
+        # Add memory using the AddMemoryRequest model
+        add_memory_request = AddMemoryRequest(
+            messages=[Message(role="user", content=request.message_content)],
+            user_id=user_id,
+            language=detected_lang,
+            metadata={
+                "conversation_turn": user_sessions[user_id]["conversation_turns"] + 1,
+                "timestamp": datetime.now().isoformat(),
+                **(request.metadata or {})
+            }
+        )
+        
+        result = add_memory(add_memory_request)
+        
+        # Update session info
+        user_sessions[user_id]["conversation_turns"] += 1
+        user_sessions[user_id]["last_activity"] = datetime.now().isoformat()
+        
+        if detected_lang not in user_sessions[user_id]["languages"]:
+            user_sessions[user_id]["languages"].append(detected_lang)
+        
+        # Get updated memory count
+        all_memories = get_all_memories(user_id)
+        if all_memories:
+            memory_count = len(all_memories) if isinstance(all_memories, list) else len(all_memories.get('results', []))
+            user_sessions[user_id]["total_memories"] = memory_count
+        
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "turn": user_sessions[user_id]["conversation_turns"],
+            "language": detected_lang,
+            "memory_added": result is not None,
+            "session_info": user_sessions[user_id]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/users/{user_id}/memories-summary")
+def get_user_memories_summary(user_id: str):
+    """
+    Get a summary of memories for a user with language statistics.
+    """
+    if user_id not in user_sessions:
+        raise HTTPException(status_code=404, detail=f"User session {user_id} not found")
+    
+    session_info = user_sessions[user_id]
+    all_memories = get_all_memories(user_id)
+    
+    # Handle memory_sample extraction - all_memories might be dict or list
+    memory_sample = []
+    if all_memories:
+        if isinstance(all_memories, dict):
+            memory_sample = all_memories.get('results', [])[:5]
+        elif isinstance(all_memories, list):
+            memory_sample = all_memories[:5]
+    
+    return {
+        "user_id": user_id,
+        "session_created": session_info["created_at"],
+        "last_activity": session_info["last_activity"],
+        "conversation_turns": session_info["conversation_turns"],
+        "languages_used": session_info["languages"],
+        "total_memories": session_info["total_memories"],
+        "memory_sample": memory_sample
+    }
+
+@app.get("/users/list")
+def list_all_users():
+    """
+    List all active user sessions.
+    """
+    return {
+        "total_users": len(user_sessions),
+        "users": [
+            {
+                "user_id": uid,
+                "created_at": info["created_at"],
+                "conversation_turns": info["conversation_turns"],
+                "languages": info["languages"],
+                "total_memories": info["total_memories"]
+            }
+            for uid, info in user_sessions.items()
+        ]
+    }
+
+@app.delete("/users/{user_id}/session")
+def delete_user_session(user_id: str):
+    """
+    Delete a user session and all associated memories.
+    """
+    if m is None:
+        raise HTTPException(status_code=503, detail="Mem0 not initialized")
+    
+    if user_id not in user_sessions:
+        raise HTTPException(status_code=404, detail=f"User session {user_id} not found")
+    
+    try:
+        # Delete all memories for this user
+        try:
+            m.reset(user_id=user_id)
+        except Exception as mem_error:
+            print(f"Warning: Could not reset memories for user {user_id}: {mem_error}")
+        
+        # Remove session info
+        if user_id in user_sessions:
+            del user_sessions[user_id]
+        
+        return {
+            "status": "success",
+            "message": f"User session {user_id} deleted successfully"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
