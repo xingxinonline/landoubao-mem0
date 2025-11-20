@@ -12,7 +12,12 @@ dependencies = [
     "openai",
     "pydantic",
     "requests",
+    "python-dotenv",
 ]
+
+[project.scripts]
+maintenance = "memory_maintenance:main"
+maintenance-once = "memory_maintenance:run_once"
 
 [tool.uv]
 dev-dependencies = []

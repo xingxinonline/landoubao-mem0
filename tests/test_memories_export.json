@@ -1,0 +1,17 @@
+[
+  {
+    "memory_id": "812ea2fc_alice_20251120185006_00011",
+    "content": {
+      "text": "我喜欢喝咖啡 2",
+      "image_url": null,
+      "audio_url": null,
+      "video_url": null,
+      "embeddings": {}
+    },
+    "metadata": {
+      "memory_id": "812ea2fc_alice_20251120185006_00011",
+      "device_uuid": "812ea2fc-70d8-4de4-912c-c603e42c4887",
+      "user_id": "alice",
+      "created_at": "2025-11-20T18:49:06.586417",
+      "last_activated_at": "2025-11-20T18:49:06.586417",
+      "level": 

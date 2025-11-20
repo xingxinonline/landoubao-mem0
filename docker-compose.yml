@@ -9,3 +9,20 @@ services:
     env_file:
       - ./app/.env
     restart: unless-stopped
+
+  memory-maintenance:
+    build: ./app
+    container_name: memory-maintenance
+    command: python -m memory_maintenance
+    env_file:
+      - ./app/.env
+    environment:
+      - MEM0_URL=http://mem0-server:8000
+      # 可选：覆盖.env中的配置
+      # - MAINTENANCE_SCAN_INTERVAL_HOURS=24
+      # - MAINTENANCE_DECAY_ALPHA=0.01
+    depends_on:
+      - mem0-server
+    restart: unless-stopped
+    profiles:
+      - maintenance  # 使用 profile 使其可选启动

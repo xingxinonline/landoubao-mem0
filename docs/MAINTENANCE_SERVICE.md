@@ -32,53 +32,68 @@
 
 ### 方式1: Docker容器（推荐）
 
-#### 使用增强版docker-compose
+#### 配置环境变量
+
+编辑 `app/.env` 文件：
+
+```env
+# Mem0服务配置
+MEM0_URL=http://localhost:8000
+ZHIPU_API_KEY=your_api_key_here
+
+# 维护服务配置
+MAINTENANCE_DECAY_ALPHA=0.01
+MAINTENANCE_FULL_THRESHOLD=0.7
+MAINTENANCE_SUMMARY_THRESHOLD=0.3
+MAINTENANCE_TAG_THRESHOLD=0.1
+MAINTENANCE_TRACE_THRESHOLD=0.03
+MAINTENANCE_SCAN_INTERVAL_HOURS=24
+MAINTENANCE_BATCH_SIZE=100
+```
+
+#### 启动维护服务
+
 ```bash
 # 启动包含维护服务的完整系统
-docker-compose -f docker-compose-with-maintenance.yml up -d
+docker-compose --profile maintenance up -d
 
 # 查看维护服务日志
-docker-compose -f docker-compose-with-maintenance.yml logs -f memory-maintenance
+docker-compose logs -f memory-maintenance
 
 # 停止维护服务
-docker-compose -f docker-compose-with-maintenance.yml stop memory-maintenance
+docker-compose --profile maintenance stop memory-maintenance
+
+# 仅启动Mem0服务（不包含维护服务）
+docker-compose up -d
 ```
 
-#### 环境变量配置
-在`docker-compose-with-maintenance.yml`中配置：
-```yaml
-environment:
-  - MEM0_URL=http://mem0-api:8000
-  - SCAN_INTERVAL_HOURS=24        # 扫描间隔（小时）
-  - DECAY_ALPHA=0.01              # 衰减系数
-  - CLEANUP_THRESHOLD=0.05        # 清理阈值
-```
+### 方式2: 本地运行（使用uv）
 
-### 方式2: 本地运行
+#### 安装依赖
+
+```powershell
+cd app
+uv sync
+```
 
 #### 一次性执行
-```powershell
-# Windows PowerShell
-.\run_maintenance.ps1 once
 
-# 或直接运行Python
-cd app
-python memory_maintenance.py --once
+```powershell
+# 使用uv运行
+uv run maintenance-once
+
+# 或使用环境变量覆盖配置
+MAINTENANCE_DECAY_ALPHA=0.02 uv run maintenance-once
 ```
 
 #### 定时服务
+
 ```powershell
-# 启动定时服务
-.\run_maintenance.ps1 start
+# 启动定时服务（每24小时扫描一次）
+uv run maintenance
 
-# 查看日志
-.\run_maintenance.ps1 logs
-
-# 查看状态
-.\run_maintenance.ps1 status
-
-# 停止服务
-.\run_maintenance.ps1 stop
+# 使用环境变量配置
+MAINTENANCE_SCAN_INTERVAL_HOURS=12 uv run maintenance
 ```
 
 ### 方式3: 系统定时任务
@@ -102,28 +117,59 @@ crontab -e
 
 ## ⚙️ 配置参数
 
-### MaintenanceConfig类参数
+### 环境变量配置
 
-| 参数 | 默认值 | 说明 |
-|-----|--------|------|
-| `mem0_url` | `http://localhost:8000` | Mem0 API地址 |
-| `zhipu_api_key` | 从.env读取 | 智谱AI API密钥（用于摘要生成） |
-| `decay_alpha` | `0.01` | 衰减系数（越大衰减越快） |
-| `full_memory_threshold` | `0.7` | 完整记忆阈值 |
-| `summary_memory_threshold` | `0.3` | 摘要记忆阈值 |
-| `cleanup_threshold` | `0.05` | 清理阈值（低于此值删除） |
-| `scan_interval_hours` | `24` | 扫描间隔（小时） |
-| `cleanup_interval_days` | `7` | 清理间隔（天） |
-| `batch_size` | `100` | 批处理大小 |
+所有配置都通过环境变量设置，支持在 `.env` 文件或 `docker-compose.yml` 中配置。
 
-### 修改配置
-编辑`app/memory_maintenance.py`中的`main()`函数：
-```python
-config = MaintenanceConfig(
-    scan_interval_hours=12,      # 改为每12小时运行
-    decay_alpha=0.02,            # 加快衰减速度
-    cleanup_threshold=0.03,      # 提高清理阈值
-)
+| 环境变量                          | 默认值                  | 说明                     |
+| --------------------------------- | ----------------------- | ------------------------ |
+| `MEM0_URL`                        | `http://localhost:8000` | Mem0 API地址             |
+| `ZHIPU_API_KEY`                   | -                       | 智谱AI API密钥（必需）   |
+| `MAINTENANCE_DECAY_ALPHA`         | `0.01`                  | 衰减系数（越大衰减越快） |
+| `MAINTENANCE_FULL_THRESHOLD`      | `0.7`                   | 完整记忆阈值             |
+| `MAINTENANCE_SUMMARY_THRESHOLD`   | `0.3`                   | 摘要记忆阈值             |
+| `MAINTENANCE_TAG_THRESHOLD`       | `0.1`                   | 标签记忆阈值             |
+| `MAINTENANCE_TRACE_THRESHOLD`     | `0.03`                  | 痕迹记忆阈值             |
+| `MAINTENANCE_SCAN_INTERVAL_HOURS` | `24`                    | 扫描间隔（小时）         |
+| `MAINTENANCE_BATCH_SIZE`          | `100`                   | 批处理大小               |
+| `MAINTENANCE_TEST_MODE`           | `false`                 | 测试模式                 |
+
+### 配置示例
+
+#### 方式1: .env文件
+
+编辑 `app/.env`：
+
+```env
+# 加快衰减速度
+MAINTENANCE_DECAY_ALPHA=0.02
+
+# 每12小时扫描一次
+MAINTENANCE_SCAN_INTERVAL_HOURS=12
+
+# 调整阈值
+MAINTENANCE_SUMMARY_THRESHOLD=0.4
+```
+
+#### 方式2: docker-compose.yml
+
+```yaml
+services:
+  memory-maintenance:
+    environment:
+      - MAINTENANCE_DECAY_ALPHA=0.02
+      - MAINTENANCE_SCAN_INTERVAL_HOURS=12
+```
+
+#### 方式3: 临时环境变量
+
+```powershell
+# PowerShell
+$env:MAINTENANCE_DECAY_ALPHA="0.02"
+uv run maintenance-once
+
+# Linux/macOS
+MAINTENANCE_DECAY_ALPHA=0.02 uv run maintenance-once
 ```
 
 ## 📊 维护报告

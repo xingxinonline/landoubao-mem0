@@ -44,12 +44,12 @@ class MemoryLevel(Enum):
 
 @dataclass
 class MaintenanceConfig:
-    """维护配置"""
-    mem0_url: str = "http://localhost:8000"
+    """维护配置（从环境变量加载）"""
+    mem0_url: str = ""
     zhipu_api_key: str = ""
     
-    # 衰减参数 - 闪电模式：12分钟内达到存档状态
-    decay_alpha: float = 100.0  # 超快衰减系数（原值0.01）
+    # 衰减参数
+    decay_alpha: float = 0.01  # 衰减系数（默认值）
     
     # 权重阈值 - 五层架构
     full_memory_threshold: float = 0.7      # 完整记忆阈值（> 0.7）
@@ -59,24 +59,35 @@ class MaintenanceConfig:
     # ≤ 0.03 为存档记忆，不再有cleanup_threshold，所有记忆都保留
     
     # 定时任务配置
-    scan_interval_hours: int = 24           # 扫描间隔（小时）- 生产环境
-    scan_interval_minutes: int = 5          # 扫描间隔（分钟）- 测试模式
-    cleanup_interval_days: int = 7          # 清理间隔（天）
+    scan_interval_hours: int = 24           # 扫描间隔（小时）
     test_mode: bool = False                 # 测试模式（使用分钟而非小时）
     
     # 批处理配置
     batch_size: int = 100                   # 每批处理记忆数
     
     def __post_init__(self):
-        """加载API密钥"""
-        if not self.zhipu_api_key:
-            env_path = Path(__file__).parent / '.env'
-            if env_path.exists():
-                with open(env_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if line.startswith('ZHIPU_API_KEY='):
-                            self.zhipu_api_key = line.split('=', 1)[1].strip()
-                            break
+        """从环境变量加载配置"""
+        import os
+        from dotenv import load_dotenv
+        
+        # 加载.env文件
+        env_path = Path(__file__).parent / '.env'
+        if env_path.exists():
+            load_dotenv(env_path)
+        
+        # 从环境变量读取（优先级更高）
+        self.mem0_url = os.getenv('MEM0_URL', 'http://localhost:8000')
+        self.zhipu_api_key = os.getenv('ZHIPU_API_KEY', '')
+        
+        # 可选配置
+        self.decay_alpha = float(os.getenv('MAINTENANCE_DECAY_ALPHA', str(self.decay_alpha)))
+        self.full_memory_threshold = float(os.getenv('MAINTENANCE_FULL_THRESHOLD', str(self.full_memory_threshold)))
+        self.summary_memory_threshold = float(os.getenv('MAINTENANCE_SUMMARY_THRESHOLD', str(self.summary_memory_threshold)))
+        self.tag_memory_threshold = float(os.getenv('MAINTENANCE_TAG_THRESHOLD', str(self.tag_memory_threshold)))
+        self.trace_memory_threshold = float(os.getenv('MAINTENANCE_TRACE_THRESHOLD', str(self.trace_memory_threshold)))
+        self.scan_interval_hours = int(os.getenv('MAINTENANCE_SCAN_INTERVAL_HOURS', str(self.scan_interval_hours)))
+        self.batch_size = int(os.getenv('MAINTENANCE_BATCH_SIZE', str(self.batch_size)))
+        self.test_mode = os.getenv('MAINTENANCE_TEST_MODE', '').lower() in ('true', '1', 'yes')
 
 
 class MemoryDecayCalculator:
@@ -513,16 +524,11 @@ class MemoryMaintenanceService:
         """定时调度器"""
         logger.info("🚀 记忆维护服务启动")
         
-        if self.config.test_mode:
-            interval = self.config.scan_interval_minutes
-            unit = "分钟"
-            wait_seconds = interval * 60
-            logger.info(f"⚠️  测试模式: 扫描间隔 = 每 {interval} 分钟")
-        else:
-            interval = self.config.scan_interval_hours
-            unit = "小时"
-            wait_seconds = interval * 3600
-            logger.info(f"扫描间隔: 每 {interval} 小时")
+        interval = self.config.scan_interval_hours
+        unit = "小时"
+        wait_seconds = interval * 3600
+        
+        logger.info(f"扫描间隔: 每 {interval} {unit}")
         
         while True:
             try:
@@ -538,34 +544,66 @@ class MemoryMaintenanceService:
             await asyncio.sleep(wait_seconds)
 
 
+def run_once():
+    """运行一次维护周期（命令行入口）"""
+    config = MaintenanceConfig()
+    service = MemoryMaintenanceService(config)
+    
+    logger.info("执行一次性维护任务")
+    asyncio.run(service.run_maintenance_cycle())
+
+
 async def main():
     """主函数"""
-    import sys
+    import argparse
+    import os
     
-    # 检查测试模式
-    test_mode = "--test" in sys.argv
-    
-    # 加载配置
-    config = MaintenanceConfig(
-        scan_interval_hours=24,          # 生产环境：每24小时
-        scan_interval_minutes=2,         # 测试模式：每2分钟
-        decay_alpha=0.01,                # 衰减系数
-        test_mode=test_mode,             # 是否测试模式
-        # 不再有cleanup_threshold，所有记忆都保留
+    parser = argparse.ArgumentParser(
+        description="记忆维护服务",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+环境变量配置:
+  MEM0_URL                          Mem0服务地址 (默认: http://localhost:8000)
+  ZHIPU_API_KEY                     智谱AI API密钥
+  MAINTENANCE_DECAY_ALPHA           衰减系数 (默认: 0.01)
+  MAINTENANCE_FULL_THRESHOLD        完整记忆阈值 (默认: 0.7)
+  MAINTENANCE_SUMMARY_THRESHOLD     摘要记忆阈值 (默认: 0.3)
+  MAINTENANCE_TAG_THRESHOLD         标签记忆阈值 (默认: 0.1)
+  MAINTENANCE_TRACE_THRESHOLD       痕迹记忆阈值 (默认: 0.03)
+  MAINTENANCE_SCAN_INTERVAL_HOURS   扫描间隔小时 (默认: 24)
+  MAINTENANCE_BATCH_SIZE            批处理大小 (默认: 100)
+  MAINTENANCE_TEST_MODE             测试模式 (true/false)
+
+使用示例:
+  # 运行一次性维护
+  uv run maintenance-once
+  
+  # 启动定时服务
+  uv run maintenance
+  
+  # 使用环境变量
+  MAINTENANCE_DECAY_ALPHA=0.02 uv run maintenance-once
+        """
     )
+    parser.add_argument("--once", action="store_true",
+                       help="执行一次性维护后退出")
+    
+    args = parser.parse_args()
+    
+    # 加载配置（从环境变量）
+    config = MaintenanceConfig()
     
     # 创建服务
     service = MemoryMaintenanceService(config)
     
     # 检查运行模式
-    if "--once" in sys.argv:
+    if args.once:
         logger.info("执行一次性维护任务")
         await service.run_maintenance_cycle()
-    elif test_mode:
-        logger.info("⚠️  启动测试模式（每2分钟扫描一次）")
-        await service.run_scheduler()
     else:
-        # 启动定时调度（生产模式）
+        # 启动定时调度
+        if config.test_mode:
+            logger.info("⚠️  测试模式启动")
         await service.run_scheduler()
 
 
