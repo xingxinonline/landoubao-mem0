@@ -382,5 +382,59 @@ def reset_qdrant_collections():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to reset collections: {str(e)}")
 
+# ============= Memory Maintenance Service =============
+
+from memory_maintenance import MemoryMaintenanceService, MaintenanceConfig
+
+# Global maintenance service instance
+maintenance_service = None
+
+@app.on_event("startup")
+async def startup_maintenance():
+    """初始化维护服务"""
+    global maintenance_service
+    config = MaintenanceConfig(
+        mem0_url="http://localhost:8000",
+        test_mode=True,
+        decay_alpha=100.0  # 闪电模式：12分钟内达到存档状态
+    )
+    maintenance_service = MemoryMaintenanceService(config)
+    print("✓ Memory maintenance service initialized (Lightning Mode: alpha=100.0)")
+
+@app.post("/admin/maintenance/run")
+async def trigger_maintenance():
+    """手动触发维护任务"""
+    if not maintenance_service:
+        raise HTTPException(status_code=503, detail="Maintenance service not initialized")
+    
+    try:
+        report = await maintenance_service.run_maintenance_cycle()
+        return {
+            "status": "completed",
+            "report": report,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Maintenance failed: {str(e)}")
+
+@app.get("/admin/maintenance/config")
+async def get_maintenance_config():
+    """查看维护配置"""
+    if not maintenance_service:
+        raise HTTPException(status_code=503, detail="Maintenance service not initialized")
+    
+    return {
+        "decay_alpha": maintenance_service.config.decay_alpha,
+        "test_mode": maintenance_service.config.test_mode,
+        "thresholds": {
+            "full": maintenance_service.config.full_memory_threshold,
+            "summary": maintenance_service.config.summary_memory_threshold,
+            "tag": maintenance_service.config.tag_memory_threshold,
+            "trace": maintenance_service.config.trace_memory_threshold
+        },
+        "mode": "Lightning Mode (12 minutes to archive)",
+        "formula": f"w(t) = 1 / (1 + {maintenance_service.config.decay_alpha} × t)"
+    }
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

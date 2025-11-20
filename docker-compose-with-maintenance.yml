@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # Qdrant向量数据库
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: mem0-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    networks:
+      - mem0-network
+    restart: unless-stopped
+
+  # Mem0 API服务
+  mem0-api:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: mem0-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - qdrant
+    networks:
+      - mem0-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 记忆维护服务（新增）
+  memory-maintenance:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: mem0-maintenance
+    volumes:
+      - ./app:/app
+      - maintenance_logs:/app/logs
+      - maintenance_reports:/app/maintenance_reports
+    environment:
+      - MEM0_URL=http://mem0-api:8000
+      - PYTHONUNBUFFERED=1
+      - SCAN_INTERVAL_HOURS=24
+      - DECAY_ALPHA=0.01
+      - CLEANUP_THRESHOLD=0.05
+    depends_on:
+      - mem0-api
+    networks:
+      - mem0-network
+    restart: unless-stopped
+    command: python memory_maintenance.py
+    # 注意：实际使用时取消注释上面的command，并确保memory_maintenance.py在/app目录
+
+volumes:
+  qdrant_data:
+    driver: local
+  maintenance_logs:
+    driver: local
+  maintenance_reports:
+    driver: local
+
+networks:
+  mem0-network:
+    driver: bridge

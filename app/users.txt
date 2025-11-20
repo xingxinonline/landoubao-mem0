@@ -1,0 +1,7 @@
+# 用户列表 - 供记忆维护服务使用
+# 每行一个user_id
+
+smart_user_001
+user_zh_001
+user_en_001
+user_ja_001

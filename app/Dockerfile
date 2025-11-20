@@ -12,6 +12,7 @@ COPY pyproject.toml .
 RUN uv pip install --system .
 
 COPY main.py .
+COPY memory_maintenance.py .
 
 EXPOSE 8000
 
