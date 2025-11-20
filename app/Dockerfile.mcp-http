@@ -1,0 +1,31 @@
+# Dockerfile for MCP HTTP SSE Server
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast package installation
+RUN pip install --no-cache-dir uv
+
+# Copy dependency files
+COPY pyproject.toml ./
+
+# Install Python dependencies using uv
+RUN uv pip install --system -r pyproject.toml
+
+# Copy application code
+COPY mcp_server_http.py .
+COPY .env* ./
+
+# Expose HTTP port
+EXPOSE 8001
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Run HTTP SSE server
+CMD ["python", "mcp_server_http.py"]

@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN pip install uv
+
+# Copy pyproject.toml
+COPY pyproject.toml .
+
+# Install dependencies using uv
+RUN uv pip install --system .
+
+# Copy application files
+COPY mcp_server.py .
+COPY main.py .
+
+# MCP servers typically run on stdio, but we'll expose a port for monitoring
+EXPOSE 8000
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Default command runs the MCP server via stdio
+CMD ["python", "mcp_server.py"]
