@@ -49,6 +49,44 @@ The system automatically detects input language and extracts facts in the same l
 
 See [MULTILINGUAL_FACTS.md](./MULTILINGUAL_FACTS.md) for detailed multilingual usage examples.
 
+## Demo & Tests
+
+### 🎯 Multi-User Personal Assistant Demo
+
+A comprehensive demonstration of Mem0's memory capabilities in a real-world scenario:
+
+```bash
+cd tests
+uv run python test_personal_assistant.py
+```
+
+**Features**:
+- 3 users (Zhang San, John, Tanaka) using different languages (Chinese, English, Japanese)
+- 20+ rounds of conversation
+- GLM-4-Flash LLM integration
+- Demonstrates memory storage, recall, and personalization
+- Shows perfect user isolation and cross-language search
+
+See [PERSONAL_ASSISTANT_TEST.md](./PERSONAL_ASSISTANT_TEST.md) for detailed test results and analysis.
+
+### 📝 Quick Tests
+
+```bash
+cd tests
+
+# Test Chinese fact extraction
+uv run test_chinese_facts.py
+
+# Test multilingual support
+uv run test_multilingual.py
+
+# Test all API endpoints
+uv run test_api.py
+
+# Run interactive demo
+uv run demo_multilingual.py
+```
+
 ## API Documentation
 
 Visit `http://localhost:8000/docs` for the interactive Swagger UI.
