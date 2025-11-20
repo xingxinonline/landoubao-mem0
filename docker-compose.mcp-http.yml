@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # MCP Server with HTTP SSE Transport (Remote Access)
+  mem0-mcp-http-server:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.mcp-http
+    container_name: mem0-mcp-http-server
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./app/.env
+    restart: unless-stopped
+    networks:
+      - mem0-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  mem0-network:
+    driver: bridge

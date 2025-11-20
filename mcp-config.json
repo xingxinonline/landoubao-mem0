@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+        "mem0": {
+            "command": "docker",
+            "args": [
+                "run",
+                "-i",
+                "--rm",
+                "--env-file",
+                "./app/.env",
+                "mem0-mcp-server"
+            ],
+            "description": "Mem0 Memory Management Server - MCP Protocol"
+        }
+    }
+}

@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  mem0-mcp-server:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.mcp
+    container_name: mem0-mcp-server
+    env_file:
+      - ./app/.env
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    # MCP servers communicate via stdio
+    # For production use, you might want to expose via a network socket
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Optional: mount config or data directories
+      - ./data:/app/data
+    networks:
+      - mem0-network
+
+  # Optional: Keep the HTTP API server for dual-mode operation
+  mem0-http-server:
+    build: ./app
+    container_name: mem0-http-server
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./app/.env
+    restart: unless-stopped
+    networks:
+      - mem0-network
+
+networks:
+  mem0-network:
+    driver: bridge
+
+volumes:
+  data:
