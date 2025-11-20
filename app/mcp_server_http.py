@@ -696,12 +696,6 @@ async def handle_message(request: Request):
             status_code=500
         )
 
-# Legacy endpoint for compatibility
-@app.post("/mcp")
-async def handle_message_legacy(request: Request):
-    """Handle client-to-server messages via HTTP POST (legacy endpoint)."""
-    return await handle_message(request)
-
 @app.get("/mcp/sse")
 async def handle_sse(request: Request):
     """Handle server-to-client messages via Server-Sent Events."""
@@ -742,12 +736,6 @@ async def handle_sse(request: Request):
             "X-Accel-Buffering": "no"
         }
     )
-
-# Legacy SSE endpoint for compatibility
-@app.get("/mcp")
-async def handle_sse_legacy(request: Request):
-    """Handle server-to-client messages via SSE (legacy endpoint)."""
-    return await handle_sse(request)
 
 @app.get("/health")
 async def health_check():
