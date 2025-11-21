@@ -6,6 +6,7 @@ Connects to MCP server, gets tool list, and tests LLM tool calling
 import asyncio
 import json
 import os
+import argparse
 from typing import List, Dict, Any
 import httpx
 from openai import OpenAI
@@ -14,8 +15,8 @@ from openai import OpenAI
 class MCPClient:
     """Simple MCP HTTP client"""
     
-    def __init__(self, base_url: str = "http://localhost:8001"):
-        self.base_url = base_url
+    def __init__(self, host: str = "localhost", port: int = 8001):
+        self.base_url = f"http://{host}:{port}"
         self.request_id = 0
     
     def _next_id(self) -> int:
@@ -111,7 +112,7 @@ def convert_mcp_tools_to_openai_format(mcp_tools: List[Dict]) -> List[Dict]:
     return openai_tools
 
 
-async def test_llm_with_mcp_tools():
+async def test_llm_with_mcp_tools(host: str = "localhost", port: int = 8001):
     """Test LLM's ability to use MCP tools"""
     
     # Step 1: Connect to MCP server and get tools
@@ -119,7 +120,7 @@ async def test_llm_with_mcp_tools():
     print("Step 1: Connecting to MCP Server")
     print("=" * 60)
     
-    mcp_client = MCPClient()
+    mcp_client = MCPClient(host, port)
     
     # Initialize connection
     init_response = await mcp_client.initialize()
@@ -318,14 +319,14 @@ async def test_llm_with_mcp_tools():
             print(f"    Error: {result['error']}")
 
 
-async def demo_tool_discovery():
+async def demo_tool_discovery(host: str = "localhost", port: int = 8001):
     """Demonstrate MCP tool discovery and conversion"""
     
     print("=" * 60)
     print("MCP Tool Discovery and Conversion Demo")
     print("=" * 60)
     
-    mcp_client = MCPClient()
+    mcp_client = MCPClient(host, port)
     
     # Get tools from MCP
     print("\n1. Fetching tools from MCP server...")
@@ -359,9 +360,17 @@ async def demo_tool_discovery():
 if __name__ == "__main__":
     import sys
     
-    if len(sys.argv) > 1 and sys.argv[1] == "demo":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Test LLM with MCP server tools")
+    parser.add_argument("--host", default="localhost", help="MCP server host (default: localhost)")
+    parser.add_argument("--port", type=int, default=8001, help="MCP server port (default: 8001)")
+    parser.add_argument("--demo", action="store_true", help="Run tool discovery demo instead of full test")
+    
+    args = parser.parse_args()
+    
+    if args.demo:
         # Just show tool discovery and conversion
-        asyncio.run(demo_tool_discovery())
+        asyncio.run(demo_tool_discovery(args.host, args.port))
     else:
         # Run full LLM test
-        asyncio.run(test_llm_with_mcp_tools())
+        asyncio.run(test_llm_with_mcp_tools(args.host, args.port))
