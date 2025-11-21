@@ -1,9 +1,0 @@
-{
-    "mcpServers": {
-        "mem0-http": {
-            "url": "http://localhost:8001/mcp",
-            "transport": "http-sse",
-            "description": "Mem0 Memory Management Server - HTTP SSE Transport (Remote Access)"
-        }
-    }
-}
