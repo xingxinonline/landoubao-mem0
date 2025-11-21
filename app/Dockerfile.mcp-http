@@ -3,17 +3,20 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies with Alibaba Cloud mirror
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
-    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
-    apt-get update && apt-get install -y \
+# Configure Alibaba Cloud APT mirrors for Debian
+RUN echo "deb http://mirrors.aliyun.com/debian trixie main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian trixie-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast package installation
-RUN pip install --no-cache-dir uv
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --no-cache-dir uv
 
-# Set Alibaba Cloud PyPI mirror for uv
+# Set Alibaba Cloud PyPI mirror for pip
 ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 
 # Copy dependency files

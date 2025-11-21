@@ -112,7 +112,7 @@ def get_system_prompt(language: str) -> str:
     return LANGUAGE_PROMPTS.get(language, LANGUAGE_PROMPTS["en"])
 
 # ============= Configuration =============
-QDRANT_HOST = os.getenv("QDRANT_HOST", "115.190.24.157")
+QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "mem0")
 
@@ -169,11 +169,23 @@ m = None
 async def lifespan(app: FastAPI):
     """Lifecycle manager for FastAPI application."""
     global m
-    try:
-        m = Memory.from_config(config)
-        print("✓ Mem0 initialized successfully")
-    except Exception as e:
-        print(f"✗ Error initializing Mem0: {e}")
+    max_retries = 5
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"Attempt {attempt + 1}/{max_retries} to initialize Mem0...")
+            print(f"Connecting to Qdrant at {QDRANT_HOST}:{QDRANT_PORT}")
+            m = Memory.from_config(config)
+            print("✓ Mem0 initialized successfully")
+            break
+        except Exception as e:
+            print(f"✗ Error initializing Mem0 (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                print(f"Retrying in {retry_delay} seconds...")
+                await asyncio.sleep(retry_delay)
+            else:
+                print("Failed to initialize Mem0 after all retries")
     yield
     # Cleanup if needed
     print("Shutting down MCP server...")

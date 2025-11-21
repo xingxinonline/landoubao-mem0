@@ -1,6 +1,25 @@
 version: '3.8'
 
 services:
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: mem0-qdrant
+    ports:
+      - "6333:6333"  # REST API
+      - "6334:6334"  # gRPC API
+    volumes:
+      - qdrant_storage:/qdrant/storage
+      - qdrant_snapshots:/qdrant/snapshots
+    restart: unless-stopped
+    networks:
+      - mem0-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "</dev/tcp/localhost/6333"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # MCP Server with HTTP SSE Transport (Remote Access)
   mem0-mcp-http-server:
     build:
@@ -19,23 +38,15 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # Qdrant Vector Database
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: qdrant
-    ports:
-      - "6333:6333"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    networks:
-      - mem0-network
-    restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_healthy
 
 networks:
   mem0-network:
     driver: bridge
 
 volumes:
-  qdrant_data:
-    driver: local
+  qdrant_storage:
+  qdrant_snapshots:
+
