@@ -114,6 +114,7 @@ def get_system_prompt(language: str) -> str:
 # ============= Configuration =============
 QDRANT_HOST = os.getenv("QDRANT_HOST", "115.190.24.157")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "mem0")
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 LLM_MODEL = os.getenv("LLM_MODEL", "glm-4-flash-250414")
@@ -134,6 +135,7 @@ config = {
     "vector_store": {
         "provider": "qdrant",
         "config": {
+            "collection_name": QDRANT_COLLECTION_NAME,
             "host": QDRANT_HOST,
             "port": QDRANT_PORT,
             "embedding_model_dims": EMBEDDING_DIMS
