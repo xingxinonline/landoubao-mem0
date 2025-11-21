@@ -1,6 +1,11 @@
 # Dockerfile for MCP HTTP SSE Server
 FROM python:3.11-slim
 
+# Set labels for better container management
+LABEL maintainer="mem0-mcp" \
+    version="1.0.0" \
+    description="MCP Server for Mem0 Memory Management"
+
 WORKDIR /app
 
 # Configure Alibaba Cloud APT mirrors for Debian
@@ -8,10 +13,13 @@ RUN echo "deb http://mirrors.aliyun.com/debian trixie main contrib non-free non-
     echo "deb http://mirrors.aliyun.com/debian trixie-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies and clean up in one layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    && rm -rf /var/lib/apt/lists/*
+    curl \
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install uv for fast package installation
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --no-cache-dir uv
@@ -22,12 +30,21 @@ ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 # Copy dependency files
 COPY pyproject.toml ./
 
-# Install Python dependencies using uv
-RUN uv pip install --system -r pyproject.toml
+# Install Python dependencies using uv and clean up
+RUN uv pip install --system -r pyproject.toml && \
+    find /usr/local -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true && \
+    find /usr/local -type f -name '*.pyc' -delete 2>/dev/null || true && \
+    rm -rf /root/.cache/pip /root/.cache/uv
 
 # Copy application code
 COPY mcp_server_http.py .
 COPY .env* ./
+
+# Create non-root user for security
+RUN useradd -m -u 1000 mcpuser && \
+    chown -R mcpuser:mcpuser /app
+
+USER mcpuser
 
 # Expose HTTP port
 EXPOSE 8001

@@ -11,7 +11,7 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
       - qdrant_snapshots:/qdrant/snapshots
-    restart: unless-stopped
+    restart: always
     networks:
       - mem0-network
     healthcheck:
@@ -19,6 +19,24 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      - QDRANT__SERVICE__MAX_REQUEST_SIZE_MB=32
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__HTTP_PORT=6333
 
   # MCP Server with HTTP SSE Transport (Remote Access)
   mem0-mcp-http-server:
@@ -30,17 +48,36 @@ services:
       - "8001:8001"
     env_file:
       - ./app/.env
-    restart: unless-stopped
+    restart: always
     networks:
       - mem0-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
     depends_on:
       qdrant:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
 
 networks:
   mem0-network:
