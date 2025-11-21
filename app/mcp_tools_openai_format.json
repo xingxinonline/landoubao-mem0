@@ -1,0 +1,100 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "add_memory",
+      "description": "Add new memories from conversation messages. Automatically detects language and stores memories in their original language. The LLM should provide conversation messages that need to be remembered.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "description": "Array of conversation messages to extract and store as memories. The system will automatically detect the language and extract facts in that language.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "assistant",
+                    "system"
+                  ]
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "role",
+                "content"
+              ]
+            }
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Unique identifier for the user whose memories are being stored"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Optional additional metadata",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "messages",
+          "user_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_memory",
+      "description": "Search for relevant memories based on a query. Returns memories in any language that match the semantic meaning of the query. The LLM should interpret and summarize the results for the user.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query in any language"
+          },
+          "user_id": {
+            "type": "string",
+            "description": "User ID whose memories to search"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of results to return",
+            "default": 10
+          }
+        },
+        "required": [
+          "query",
+          "user_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "delete_memory",
+      "description": "Delete specific memories by their IDs. Can delete one or multiple memories at once.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "memory_id": {
+            "type": "string",
+            "description": "Memory ID to delete. For deleting all memories of a user, use user_id instead."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "User ID - if provided without memory_id, deletes ALL memories for this user"
+          }
+        }
+      }
+    }
+  }
+]
