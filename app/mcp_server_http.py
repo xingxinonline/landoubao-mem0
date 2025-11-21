@@ -327,10 +327,11 @@ async def handle_tools_list() -> Dict:
                                 "required": ["role", "content"]
                             }
                         },
-                        "user_id": {"type": "string", "description": "REQUIRED. Unique identifier for the user. Must be a top-level parameter, NOT inside metadata."},
+                        "device_uuid": {"type": "string", "description": "REQUIRED. Unique identifier for the device. Used for memory isolation."},
+                        "voiceprint_id": {"type": "string", "description": "Optional. Unique identifier for the speaker (voiceprint) to distinguish users on the same device."},
                         "metadata": {"type": "object", "description": "Optional additional metadata", "additionalProperties": True}
                     },
-                    "required": ["messages", "user_id"]
+                    "required": ["messages", "device_uuid"]
                 }
             },
             {
@@ -340,10 +341,11 @@ async def handle_tools_list() -> Dict:
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "Search query in any language"},
-                        "user_id": {"type": "string", "description": "User ID whose memories to search"},
+                        "device_uuid": {"type": "string", "description": "Device UUID to search within."},
+                        "voiceprint_id": {"type": "string", "description": "Optional. Filter memories by specific speaker voiceprint ID."},
                         "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10}
                     },
-                    "required": ["query", "user_id"]
+                    "required": ["query", "device_uuid"]
                 }
             }
         ]
@@ -360,13 +362,21 @@ async def handle_tools_call(name: str, arguments: Dict) -> Dict:
     # Run tool operations concurrently using asyncio
     if name == "add_memory":
         messages = arguments.get("messages", [])
-        user_id = arguments.get("user_id")
+        device_uuid = arguments.get("device_uuid")
+        voiceprint_id = arguments.get("voiceprint_id")
         metadata = arguments.get("metadata", {})
         
-        # Fallback: check if user_id is in metadata
-        if not user_id and isinstance(metadata, dict) and "user_id" in metadata:
-            user_id = metadata.pop("user_id")
-            print(f"Recovered user_id from metadata: {user_id}")
+        # Backward compatibility: check user_id if device_uuid is missing
+        if not device_uuid and "user_id" in arguments:
+            device_uuid = arguments["user_id"]
+            print(f"Using user_id as device_uuid: {device_uuid}")
+            
+        if not device_uuid:
+            raise ValueError("device_uuid is required")
+
+        # Add voiceprint_id to metadata if provided
+        if voiceprint_id:
+            metadata["voiceprint_id"] = voiceprint_id
         
         # Auto-detect language from messages
         language = "en"
@@ -386,10 +396,11 @@ async def handle_tools_call(name: str, arguments: Dict) -> Dict:
         metadata["language"] = language
         
         # Run in thread pool to avoid blocking, with timeout
+        # Use device_uuid as the Mem0 user_id for isolation
         result = await asyncio.wait_for(
             loop.run_in_executor(
                 executor,
-                lambda: m.add(messages=enhanced_messages, user_id=user_id, metadata=metadata)
+                lambda: m.add(messages=enhanced_messages, user_id=device_uuid, metadata=metadata)
             ),
             timeout=REQUEST_TIMEOUT
         )
@@ -407,13 +418,26 @@ async def handle_tools_call(name: str, arguments: Dict) -> Dict:
     
     elif name == "search_memory":
         query = arguments.get("query")
-        user_id = arguments.get("user_id")
+        device_uuid = arguments.get("device_uuid")
+        voiceprint_id = arguments.get("voiceprint_id")
         limit = arguments.get("limit", 10)
+        
+        # Backward compatibility
+        if not device_uuid and "user_id" in arguments:
+            device_uuid = arguments["user_id"]
+            
+        if not device_uuid:
+            raise ValueError("device_uuid is required")
+            
+        # Build filters
+        filters = None
+        if voiceprint_id:
+            filters = {"voiceprint_id": voiceprint_id}
         
         result = await asyncio.wait_for(
             loop.run_in_executor(
                 executor,
-                lambda: m.search(query=query, user_id=user_id, limit=limit)
+                lambda: m.search(query=query, user_id=device_uuid, limit=limit, filters=filters)
             ),
             timeout=REQUEST_TIMEOUT
         )
