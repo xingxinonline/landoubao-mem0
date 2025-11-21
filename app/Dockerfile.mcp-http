@@ -21,7 +21,8 @@ RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debia
 # Install uv for fast package installation
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --no-cache-dir uv
 
-# Set Alibaba Cloud PyPI mirror for pip
+# Set Alibaba Cloud PyPI mirror for uv and pip
+ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 
 # Copy dependency files
