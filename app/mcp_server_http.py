@@ -267,13 +267,13 @@ async def handle_tools_list() -> Dict:
         "tools": [
             {
                 "name": "add_memory",
-                "description": "Add a new memory from conversation messages with automatic multilingual support. Extracts facts in the detected language.",
+                "description": "Add new memories from conversation messages. Automatically detects language and stores memories in their original language. The LLM should provide conversation messages that need to be remembered.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "messages": {
                             "type": "array",
-                            "description": "Array of conversation messages to store as memory",
+                            "description": "Array of conversation messages to extract and store as memories. The system will automatically detect the language and extract facts in that language.",
                             "items": {
                                 "type": "object",
                                 "properties": {
@@ -283,106 +283,21 @@ async def handle_tools_list() -> Dict:
                                 "required": ["role", "content"]
                             }
                         },
-                        "user_id": {"type": "string", "description": "Unique identifier for the user"},
-                        "language": {
-                            "type": "string",
-                            "description": "Language code (zh/en/ja/ko/ar/ru/th). If not provided, auto-detect from content.",
-                            "enum": ["zh", "en", "ja", "ko", "ar", "ru", "th"]
-                        },
-                        "metadata": {"type": "object", "description": "Additional metadata", "additionalProperties": True}
+                        "user_id": {"type": "string", "description": "REQUIRED. Unique identifier for the user. Must be a top-level parameter, NOT inside metadata."},
+                        "metadata": {"type": "object", "description": "Optional additional metadata", "additionalProperties": True}
                     },
                     "required": ["messages", "user_id"]
                 }
             },
             {
                 "name": "search_memory",
-                "description": "Search for relevant memories based on a query.",
+                "description": "Search for relevant memories based on a query. Returns memories in any language that match the semantic meaning of the query. The LLM should interpret and summarize the results for the user.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "Search query"},
-                        "user_id": {"type": "string", "description": "User ID"},
-                        "limit": {"type": "integer", "description": "Max results", "default": 5}
-                    },
-                    "required": ["query", "user_id"]
-                }
-            },
-            {
-                "name": "get_all_memories",
-                "description": "Get all memories for a specific user.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "user_id": {"type": "string", "description": "User ID"},
-                        "limit": {"type": "integer", "description": "Max memories", "default": 100}
-                    },
-                    "required": ["user_id"]
-                }
-            },
-            {
-                "name": "delete_memory",
-                "description": "Delete a specific memory by its ID.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "memory_id": {"type": "string", "description": "Memory ID"}
-                    },
-                    "required": ["memory_id"]
-                }
-            },
-            {
-                "name": "delete_all_memories",
-                "description": "Delete all memories for a user.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "user_id": {"type": "string", "description": "User ID"}
-                    },
-                    "required": ["user_id"]
-                }
-            },
-            {
-                "name": "create_user_session",
-                "description": "Create a new user session with UUID.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "metadata": {"type": "object", "description": "User metadata", "additionalProperties": True}
-                    }
-                }
-            },
-            {
-                "name": "get_memory_stats",
-                "description": "Get statistics about user memories.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "user_id": {"type": "string", "description": "User ID"}
-                    },
-                    "required": ["user_id"]
-                }
-            },
-            {
-                "name": "detect_language",
-                "description": "Detect language of text.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "text": {"type": "string", "description": "Text to detect"}
-                    },
-                    "required": ["text"]
-                }
-            },
-            {
-                "name": "search_memories_by_language",
-                "description": "Search memories filtered by language.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "Search query"},
-                        "user_id": {"type": "string", "description": "User ID"},
-                        "language": {"type": "string", "enum": ["zh", "en", "ja", "ko", "ar", "ru", "th"]},
-                        "limit": {"type": "integer", "default": 5}
+                        "query": {"type": "string", "description": "Search query in any language"},
+                        "user_id": {"type": "string", "description": "User ID whose memories to search"},
+                        "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10}
                     },
                     "required": ["query", "user_id"]
                 }
@@ -395,31 +310,37 @@ async def handle_tools_call(name: str, arguments: Dict) -> Dict:
     if m is None:
         raise Exception("Mem0 not initialized")
     
+    loop = asyncio.get_event_loop()
+    
     # Run tool operations concurrently using asyncio
     if name == "add_memory":
         messages = arguments.get("messages", [])
         user_id = arguments.get("user_id")
         metadata = arguments.get("metadata", {})
-        language = arguments.get("language")
         
-        # Detect language if not provided
-        if not language:
-            for msg in messages:
-                if msg.get("role") == "user":
-                    language = detect_language(msg.get("content", ""))
+        # Fallback: check if user_id is in metadata
+        if not user_id and isinstance(metadata, dict) and "user_id" in metadata:
+            user_id = metadata.pop("user_id")
+            print(f"Recovered user_id from metadata: {user_id}")
+        
+        # Auto-detect language from messages
+        language = "en"
+        for msg in messages:
+            if msg.get("role") == "user":
+                detected = detect_language(msg.get("content", ""))
+                if detected:
+                    language = detected
                     break
-            if not language:
-                language = "en"
         
-        # Add language-specific system prompt
+        # Add language-specific system prompt for fact extraction
         system_prompt = get_system_prompt(language)
         enhanced_messages = [{"role": "system", "content": system_prompt}] + messages
         
+        # Add metadata
         metadata["timestamp"] = datetime.now().isoformat()
         metadata["language"] = language
         
         # Run in executor to avoid blocking
-        loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
             lambda: m.add(messages=enhanced_messages, user_id=user_id, metadata=metadata)
@@ -431,18 +352,16 @@ async def handle_tools_call(name: str, arguments: Dict) -> Dict:
                 "text": json.dumps({
                     "success": True,
                     "result": result,
-                    "language": language,
-                    "message": f"Memory added successfully in {language}"
-                }, indent=2)
+                    "message": "Memory added successfully"
+                }, indent=2, ensure_ascii=False)
             }]
         }
     
     elif name == "search_memory":
         query = arguments.get("query")
         user_id = arguments.get("user_id")
-        limit = arguments.get("limit", 5)
+        limit = arguments.get("limit", 10)
         
-        loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
             lambda: m.search(query=query, user_id=user_id, limit=limit)
@@ -455,164 +374,7 @@ async def handle_tools_call(name: str, arguments: Dict) -> Dict:
                     "success": True,
                     "results": result,
                     "count": len(result) if isinstance(result, list) else 0
-                }, indent=2)
-            }]
-        }
-    
-    elif name == "get_all_memories":
-        user_id = arguments.get("user_id")
-        limit = arguments.get("limit", 100)
-        
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: m.get_all(user_id=user_id, limit=limit)
-        )
-        
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": True,
-                    "memories": result,
-                    "total": len(result) if isinstance(result, list) else 0
-                }, indent=2)
-            }]
-        }
-    
-    elif name == "delete_memory":
-        memory_id = arguments.get("memory_id")
-        
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: m.delete(memory_id))
-        
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": True,
-                    "message": f"Memory {memory_id} deleted successfully"
-                }, indent=2)
-            }]
-        }
-    
-    elif name == "delete_all_memories":
-        user_id = arguments.get("user_id")
-        
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: m.reset(user_id=user_id))
-        
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": True,
-                    "message": f"All memories for user {user_id} deleted"
-                }, indent=2)
-            }]
-        }
-    
-    elif name == "create_user_session":
-        user_id = str(uuid.uuid4())
-        metadata = arguments.get("metadata", {})
-        
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": True,
-                    "user_id": user_id,
-                    "created_at": datetime.now().isoformat(),
-                    "metadata": metadata
-                }, indent=2)
-            }]
-        }
-    
-    elif name == "get_memory_stats":
-        user_id = arguments.get("user_id")
-        
-        loop = asyncio.get_event_loop()
-        all_memories = await loop.run_in_executor(
-            None,
-            lambda: m.get_all(user_id=user_id)
-        )
-        
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": True,
-                    "user_id": user_id,
-                    "total_memories": len(all_memories) if isinstance(all_memories, list) else 0,
-                    "timestamp": datetime.now().isoformat()
-                }, indent=2)
-            }]
-        }
-    
-    elif name == "detect_language":
-        text = arguments.get("text", "")
-        language = detect_language(text)
-        
-        pattern = LANGUAGE_PATTERNS.get(language)
-        if pattern:
-            matches = len(pattern.findall(text))
-            confidence = min(100, (matches / max(1, len(text))) * 100)
-        else:
-            confidence = 0
-        
-        lang_name = {
-            "zh": "Chinese (中文)", "en": "English", "ja": "Japanese (日本語)",
-            "ko": "Korean (한국어)", "ar": "Arabic (العربية)", 
-            "ru": "Russian (Русский)", "th": "Thai (ไทย)"
-        }.get(language, "Unknown")
-        
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": True,
-                    "language_code": language,
-                    "language_name": lang_name,
-                    "confidence": round(confidence, 2),
-                    "text_sample": text[:100]
-                }, indent=2)
-            }]
-        }
-    
-    elif name == "search_memories_by_language":
-        query = arguments.get("query")
-        user_id = arguments.get("user_id")
-        language = arguments.get("language")
-        limit = arguments.get("limit", 5)
-        
-        loop = asyncio.get_event_loop()
-        all_results = await loop.run_in_executor(
-            None,
-            lambda: m.search(query=query, user_id=user_id, limit=limit * 2)
-        )
-        
-        if language:
-            filtered_results = []
-            for item in (all_results if isinstance(all_results, list) else []):
-                meta = item.get("metadata", {}) if isinstance(item, dict) else {}
-                if meta.get("language") == language:
-                    filtered_results.append(item)
-                if len(filtered_results) >= limit:
-                    break
-            results = filtered_results
-        else:
-            results = all_results[:limit] if isinstance(all_results, list) else []
-        
-        return {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "success": True,
-                    "query": query,
-                    "language_filter": language,
-                    "results": results,
-                    "count": len(results)
-                }, indent=2)
+                }, indent=2, ensure_ascii=False)
             }]
         }
     

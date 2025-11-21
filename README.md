@@ -1,62 +1,69 @@
-# Mem0 Local Docker Deployment
+# Mem0 MCP Server (Simplified)
 
-This project deploys a Mem0 server with custom configurations for Zhipu AI (LLM) and ModelArk (Embeddings), connected to a remote Qdrant instance.
+这是一个基于 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 的记忆服务，使用 Mem0 作为后端存储。它专为大语言模型 (LLM) 设计，提供简单、高效的长期记忆能力。
 
-## Prerequisites
+## ✨ 核心特性
 
-- Docker and Docker Compose installed.
-- API Keys for Zhipu AI and ModelArk.
+- **极简 API**: 仅提供 2 个核心工具 (`add_memory`, `search_memory`)，降低 LLM 认知负担。
+- **安全设计**: 移除删除功能，防止误操作，仅保留增加和搜索能力。
+- **多语言支持**: 内置自动语言检测和处理，支持中、英、日、韩等多种语言。
+- **跨语言搜索**: 基于语义向量检索，支持跨语言查询（如用中文搜英文记忆）。
+- **Docker 部署**: 提供一键启动的 Docker 环境，生产就绪。
+- **HTTP SSE 传输**: 使用标准的 HTTP Server-Sent Events 协议，支持远程访问。
 
-## Configuration
+## 🚀 快速开始
 
-1.  Open `app/.env` and set your API keys:
-    ```env
-    ZHIPU_API_KEY=your_actual_key
-    MODELARK_API_KEY=your_actual_key
-    ```
-    The Qdrant host is pre-configured to `115.190.27.17`.
+### 1. 环境准备
 
-## Running the Server
+确保已安装 Docker 和 Docker Compose。
 
-Run the following command in the root directory:
-
+配置环境变量：
 ```bash
-docker-compose up --build -d
+cp app/.env.example app/.env
+# 编辑 app/.env 填入你的 API Key (智谱 AI, ModelArk, Qdrant)
 ```
 
-The server will start at `http://localhost:8000`.
+### 2. 启动服务
 
-## API Endpoints
+```bash
+docker-compose -f docker-compose.mcp-http.yml up -d
+```
 
--   **POST /memories**: Add a memory with automatic language detection and language-aware fact extraction.
--   **POST /memories/search**: Search memories (supports cross-language search via vector embeddings).
--   **GET /memories**: Get all memories for a user.
--   **DELETE /memories/{memory_id}**: Delete a specific memory.
--   **DELETE /memories?user_id={user_id}**: Reset memories for a user.
--   **GET /health**: Health check with Mem0 initialization status.
+服务将在 `http://localhost:8001` 启动。
 
-### Language Support
+### 3. 测试运行
 
-The system automatically detects input language and extracts facts in the same language:
+我们提供了一个测试脚本，模拟 LLM 调用 MCP 工具：
 
-- **中文 (Chinese)** - 自动提取中文事实
-- **English** - Automatically extracts English facts
-- **日本語 (Japanese)** - 日本語で事実を抽出
-- **한국어 (Korean)** - 한국어로 사실 추출
-- **العربية (Arabic)** - استخراج الحقائق بالعربية
-- **Русский (Russian)** - Извлечение фактов на русском
-- **ไทย (Thai)** - สกัดข้อเท็จจริงในภาษาไทย
+```bash
+# 设置 API Key (Windows PowerShell)
+$env:ZHIPU_API_KEY = "your_zhipu_api_key"
 
-See [MULTILINGUAL_FACTS.md](./MULTILINGUAL_FACTS.md) for detailed multilingual usage examples.
+# 运行测试
+uv run --directory app python ../test_llm_with_mcp_tools.py
+```
 
-## API Documentation
+## 📚 文档
 
-Visit `http://localhost:8000/docs` for the interactive Swagger UI.
+- [**使用指南 (SIMPLIFIED_MCP_SERVER_GUIDE.md)**](./SIMPLIFIED_MCP_SERVER_GUIDE.md): 详细的 API 文档和使用说明。
+- [**测试报告 (FINAL_TEST_REPORT.md)**](./FINAL_TEST_REPORT.md): 最近一次的功能验证报告。
 
-## Implementation Details
+## 🛠️ 工具列表
 
--   **LLM**: Zhipu AI (`glm-4-flash-250414`) via OpenAI-compatible provider.
--   **Embedder**: ModelArk (`Qwen3-Embedding-8B`) via OpenAI-compatible provider.
--   **Vector Store**: Qdrant at `115.190.27.17:6333`.
--   **Package Management**: Uses `uv` for fast Python package management.
--   **Concurrency**: The server uses FastAPI. Blocking Mem0 calls are run in a thread pool to support concurrency.
+| 工具名称        | 描述                                 |
+| --------------- | ------------------------------------ |
+| `add_memory`    | 添加记忆。自动检测语言并提取事实。   |
+| `search_memory` | 搜索记忆。基于语义匹配，支持跨语言。 |
+
+## 🏗️ 项目结构
+
+```
+.
+├── app/
+│   ├── mcp_server_http.py    # MCP Server 核心代码
+│   ├── Dockerfile.mcp-http   # Docker 构建文件
+│   └── pyproject.toml        # 依赖管理
+├── docker-compose.mcp-http.yml # Docker Compose 配置
+├── test_llm_with_mcp_tools.py  # LLM 集成测试脚本
+└── SIMPLIFIED_MCP_SERVER_GUIDE.md # 使用指南
+```
