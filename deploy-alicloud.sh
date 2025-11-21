@@ -14,17 +14,17 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# 检查 Docker 是否安装
+# 检查 Docker Compose 是否安装
 if ! command -v docker &> /dev/null; then
     echo -e "${RED}错误: Docker 未安装${NC}"
     echo "请先安装 Docker: https://docs.docker.com/engine/install/"
     exit 1
 fi
 
-# 检查 Docker Compose 是否安装
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}错误: Docker Compose 未安装${NC}"
-    echo "请先安装 Docker Compose"
+# 检查 Docker Compose V2
+if ! docker compose version &> /dev/null; then
+    echo -e "${RED}错误: Docker Compose V2 未安装${NC}"
+    echo "请升级到 Docker Compose V2"
     exit 1
 fi
 
@@ -48,15 +48,15 @@ mkdir -p qdrant_storage qdrant_snapshots
 
 # 停止旧容器
 echo "停止旧容器..."
-docker-compose -f docker-compose.mcp-http.yml down 2>/dev/null || true
+docker compose -f docker-compose.mcp-http.yml down 2>/dev/null || true
 
 # 构建镜像
 echo "构建 Docker 镜像..."
-docker-compose -f docker-compose.mcp-http.yml build --no-cache
+docker compose -f docker-compose.mcp-http.yml build --no-cache
 
 # 启动服务
 echo "启动服务..."
-docker-compose -f docker-compose.mcp-http.yml up -d
+docker compose -f docker-compose.mcp-http.yml up -d
 
 # 等待服务启动
 echo "等待服务启动..."
@@ -70,7 +70,7 @@ echo "=========================================="
 
 # 检查容器状态
 echo -e "\n${YELLOW}容器状态:${NC}"
-docker-compose -f docker-compose.mcp-http.yml ps
+docker compose -f docker-compose.mcp-http.yml ps
 
 # 检查健康状态
 echo -e "\n${YELLOW}健康检查:${NC}"
@@ -83,7 +83,7 @@ if curl -s http://localhost:8001/health > /dev/null 2>&1; then
 else
     echo -e "${RED}✗ MCP 服务器健康检查失败${NC}"
     echo "查看日志:"
-    docker-compose -f docker-compose.mcp-http.yml logs --tail=50 mem0-mcp-http-server
+    docker compose -f docker-compose.mcp-http.yml logs --tail=50 mem0-mcp-http-server
     exit 1
 fi
 
@@ -99,10 +99,10 @@ echo "  - 健康检查: http://localhost:8001/health"
 echo "  - Qdrant 控制台: http://localhost:6333/dashboard"
 echo ""
 echo "查看日志:"
-echo "  docker-compose -f docker-compose.mcp-http.yml logs -f"
+echo "  docker compose -f docker-compose.mcp-http.yml logs -f"
 echo ""
 echo "停止服务:"
-echo "  docker-compose -f docker-compose.mcp-http.yml down"
+echo "  docker compose -f docker-compose.mcp-http.yml down"
 echo ""
 echo "=========================================="
 

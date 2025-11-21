@@ -128,7 +128,7 @@ while true; do
         # 发送告警
         echo "MCP Server down!" | mail -s "Alert" admin@example.com
         # 自动重启
-        docker-compose -f docker-compose.mcp-http.yml restart mem0-mcp-http-server
+        docker compose -f docker-compose.mcp-http.yml restart mem0-mcp-http-server
     fi
     sleep 60
 done
@@ -188,7 +188,7 @@ fs.file-max = 100000
 1. **查看日志**
 ```bash
 # 服务日志
-docker-compose -f docker-compose.mcp-http.yml logs -f --tail=100
+docker compose -f docker-compose.mcp-http.yml logs -f --tail=100
 
 # 特定容器日志
 docker logs mem0-mcp-http-server --tail=100 -f
