@@ -9,9 +9,11 @@ import json
 import os
 import re
 import uuid
+import time
 from typing import Any, Dict, List, Optional, AsyncGenerator
 from datetime import datetime
 from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -130,6 +132,11 @@ EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "https://ai.gitee.com/v1")
 ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY", "your_zhipu_key")
 MODELARK_API_KEY = os.getenv("MODELARK_API_KEY", "your_modelark_key")
 
+# Concurrency settings
+MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "20"))
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "60"))
+THREAD_POOL_SIZE = int(os.getenv("THREAD_POOL_SIZE", "10"))
+
 # Build Mem0 configuration
 config = {
     "vector_store": {
@@ -164,11 +171,31 @@ config = {
 
 # Initialize Mem0
 m = None
+# Thread pool for blocking operations
+executor = None
+# Semaphore for concurrent request limiting
+request_semaphore = None
+# Request metrics
+request_metrics = {
+    "total_requests": 0,
+    "active_requests": 0,
+    "failed_requests": 0,
+    "avg_response_time": 0.0
+}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for FastAPI application."""
-    global m
+    global m, executor, request_semaphore
+    
+    # Initialize thread pool
+    executor = ThreadPoolExecutor(max_workers=THREAD_POOL_SIZE)
+    print(f"✓ Thread pool initialized with {THREAD_POOL_SIZE} workers")
+    
+    # Initialize request semaphore for concurrency control
+    request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    print(f"✓ Concurrent request limit set to {MAX_CONCURRENT_REQUESTS}")
+    
     max_retries = 5
     retry_delay = 2
     
@@ -187,8 +214,11 @@ async def lifespan(app: FastAPI):
             else:
                 print("Failed to initialize Mem0 after all retries")
     yield
-    # Cleanup if needed
+    # Cleanup
     print("Shutting down MCP server...")
+    if executor:
+        executor.shutdown(wait=True)
+        print("✓ Thread pool shut down")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -325,6 +355,7 @@ async def handle_tools_call(name: str, arguments: Dict) -> Dict:
         raise Exception("Mem0 not initialized")
     
     loop = asyncio.get_event_loop()
+    start_time = time.time()
     
     # Run tool operations concurrently using asyncio
     if name == "add_memory":
@@ -354,10 +385,13 @@ async def handle_tools_call(name: str, arguments: Dict) -> Dict:
         metadata["timestamp"] = datetime.now().isoformat()
         metadata["language"] = language
         
-        # Run in executor to avoid blocking
-        result = await loop.run_in_executor(
-            None,
-            lambda: m.add(messages=enhanced_messages, user_id=user_id, metadata=metadata)
+        # Run in thread pool to avoid blocking, with timeout
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                executor,
+                lambda: m.add(messages=enhanced_messages, user_id=user_id, metadata=metadata)
+            ),
+            timeout=REQUEST_TIMEOUT
         )
         
         return {
@@ -376,9 +410,12 @@ async def handle_tools_call(name: str, arguments: Dict) -> Dict:
         user_id = arguments.get("user_id")
         limit = arguments.get("limit", 10)
         
-        result = await loop.run_in_executor(
-            None,
-            lambda: m.search(query=query, user_id=user_id, limit=limit)
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                executor,
+                lambda: m.search(query=query, user_id=user_id, limit=limit)
+            ),
+            timeout=REQUEST_TIMEOUT
         )
         
         return {
@@ -457,20 +494,38 @@ async def root():
 @app.post("/mcp/messages")
 async def handle_message(request: Request):
     """Handle client-to-server messages via HTTP POST."""
-    try:
-        request_data = await request.json()
-        response = await process_request(request_data)
-        return JSONResponse(content=response)
-    except json.JSONDecodeError:
-        return JSONResponse(
-            content=create_error_response(None, MCPErrorCode.PARSE_ERROR, "Invalid JSON"),
-            status_code=400
-        )
-    except Exception as e:
-        return JSONResponse(
-            content=create_error_response(None, MCPErrorCode.INTERNAL_ERROR, str(e)),
-            status_code=500
-        )
+    start_time = time.time()
+    
+    # Acquire semaphore for concurrent request limiting
+    async with request_semaphore:
+        request_metrics["total_requests"] += 1
+        request_metrics["active_requests"] += 1
+        
+        try:
+            request_data = await request.json()
+            response = await process_request(request_data)
+            
+            # Update metrics
+            elapsed = time.time() - start_time
+            request_metrics["avg_response_time"] = (
+                request_metrics["avg_response_time"] * 0.95 + elapsed * 0.05
+            )
+            
+            return JSONResponse(content=response)
+        except json.JSONDecodeError:
+            request_metrics["failed_requests"] += 1
+            return JSONResponse(
+                content=create_error_response(None, MCPErrorCode.PARSE_ERROR, "Invalid JSON"),
+                status_code=400
+            )
+        except Exception as e:
+            request_metrics["failed_requests"] += 1
+            return JSONResponse(
+                content=create_error_response(None, MCPErrorCode.INTERNAL_ERROR, str(e)),
+                status_code=500
+            )
+        finally:
+            request_metrics["active_requests"] -= 1
 
 @app.get("/mcp/sse")
 async def handle_sse(request: Request):
@@ -520,6 +575,21 @@ async def health_check():
         "status": "healthy",
         "mem0_initialized": m is not None,
         "active_connections": len(active_connections),
+        "concurrency": {
+            "max_concurrent_requests": MAX_CONCURRENT_REQUESTS,
+            "active_requests": request_metrics["active_requests"],
+            "thread_pool_size": THREAD_POOL_SIZE,
+            "request_timeout": REQUEST_TIMEOUT
+        },
+        "metrics": {
+            "total_requests": request_metrics["total_requests"],
+            "failed_requests": request_metrics["failed_requests"],
+            "avg_response_time_ms": round(request_metrics["avg_response_time"] * 1000, 2),
+            "success_rate": round(
+                (1 - request_metrics["failed_requests"] / max(request_metrics["total_requests"], 1)) * 100,
+                2
+            )
+        },
         "timestamp": datetime.now().isoformat()
     }
 
