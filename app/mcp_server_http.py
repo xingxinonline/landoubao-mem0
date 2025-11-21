@@ -491,6 +491,16 @@ async def root():
         "status": "running"
     }
 
+@app.post("/")
+async def handle_root_post(request: Request):
+    """Fallback for clients sending messages to root."""
+    return await handle_message(request)
+
+@app.post("/mcp/sse")
+async def handle_sse_post(request: Request):
+    """Fallback for clients sending messages to SSE endpoint."""
+    return await handle_message(request)
+
 @app.post("/mcp/messages")
 async def handle_message(request: Request):
     """Handle client-to-server messages via HTTP POST."""
