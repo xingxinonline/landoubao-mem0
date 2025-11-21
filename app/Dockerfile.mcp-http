@@ -8,13 +8,10 @@ LABEL maintainer="mem0-mcp" \
 
 WORKDIR /app
 
-# Configure Alibaba Cloud APT mirrors for Debian
-RUN echo "deb http://mirrors.aliyun.com/debian trixie main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
-    echo "deb http://mirrors.aliyun.com/debian trixie-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
-    echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list
-
-# Install system dependencies and clean up in one layer
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies with Alibaba Cloud mirrors
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     curl \
     ca-certificates \
