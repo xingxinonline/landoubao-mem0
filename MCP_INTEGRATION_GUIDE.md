@@ -49,6 +49,7 @@ sequenceDiagram
 
 * **适用场景**: 用户陈述了新的事实、改变了偏好、提供了背景信息。
 * **多语言**: 支持任意语言输入，服务器会自动检测并处理。
+* **隔离策略**: 使用 `device_uuid` 进行物理设备隔离，可选 `voiceprint_id` 区分同一设备上的不同用户。
 
 **Schema (JSON)**:
 
@@ -71,16 +72,20 @@ sequenceDiagram
           "required": ["role", "content"]
         }
       },
-      "user_id": {
+      "device_uuid": {
         "type": "string",
-        "description": "REQUIRED. Unique identifier for the user. Must be a top-level parameter."
+        "description": "REQUIRED. Unique identifier for the device. Used for memory isolation."
+      },
+      "voiceprint_id": {
+        "type": "string",
+        "description": "Optional. Unique identifier for the speaker (voiceprint) to distinguish users on the same device."
       },
       "metadata": {
         "type": "object",
         "description": "Optional metadata (e.g., session_id, source)"
       }
     },
-    "required": ["messages", "user_id"]
+    "required": ["messages", "device_uuid"]
   }
 }
 ```
@@ -91,6 +96,7 @@ sequenceDiagram
 
 * **适用场景**: 需要回忆之前的对话、查询用户偏好、回答基于历史信息的问题。
 * **跨语言**: 支持跨语言搜索（如用中文搜英文记忆）。
+* **过滤**: 支持通过 `voiceprint_id` 过滤特定用户的记忆。
 
 **Schema (JSON)**:
 
@@ -105,9 +111,13 @@ sequenceDiagram
         "type": "string",
         "description": "Search query string."
       },
-      "user_id": {
+      "device_uuid": {
         "type": "string",
-        "description": "User ID whose memories to search."
+        "description": "Device UUID to search within."
+      },
+      "voiceprint_id": {
+        "type": "string",
+        "description": "Optional. Filter memories by specific speaker voiceprint ID."
       },
       "limit": {
         "type": "integer",
@@ -115,7 +125,7 @@ sequenceDiagram
         "default": 10
       }
     },
-    "required": ["query", "user_id"]
+    "required": ["query", "device_uuid"]
   }
 }
 ```
@@ -133,15 +143,16 @@ sequenceDiagram
 
 1. **主动检索 (search_memory)**:
    - 在回答用户关于"我"、"之前"、"历史"或特定偏好的问题前，务必先调用 search_memory。
-   - 示例: 用户问"我上次提到的那本书叫什么？" -> search_memory(query="书名", user_id=...)
+   - 示例: 用户问"我上次提到的那本书叫什么？" -> search_memory(query="书名", device_uuid=..., voiceprint_id=...)
 
 2. **主动记录 (add_memory)**:
    - 当用户提供新的个人信息、偏好、重要事实时，调用 add_memory。
-   - 示例: 用户说"我搬到上海了" -> add_memory(messages=[...], user_id=...)
+   - 示例: 用户说"我搬到上海了" -> add_memory(messages=[...], device_uuid=..., voiceprint_id=...)
    - 修正记忆: 如果用户更正了之前的说法（如"我不喜欢咖啡了，改喝茶"），直接调用 add_memory 记录新偏好，系统会自动处理。
 
 3. **参数要求**:
-   - user_id 是必需的，且必须作为顶层参数传递，严禁放在 metadata 中。
+   - device_uuid 是必需的，用于设备级隔离。
+   - voiceprint_id 是可选的，用于区分同一设备上的不同用户。
 
 4. **多语言处理**:
    - 你可以使用任何语言与工具交互，系统会自动处理语言转换。
@@ -149,9 +160,9 @@ sequenceDiagram
 
 ### 4.2 交互流程示例
 
-#### 场景：用户更改偏好
+#### 场景：用户更改偏好（带声纹ID）
 
-1. **用户**: "我以后早餐不吃面包了，改吃燕麦。"
+1. **用户**: "我以后早餐不吃面包了，改吃燕麦。" (Device: dev-001, Voice: user-A)
 2. **Agent (思考)**: 用户更新了饮食偏好，需要记录。
 3. **Agent (调用工具)**:
 
@@ -160,17 +171,18 @@ sequenceDiagram
       "name": "add_memory",
       "arguments": {
         "messages": [{"role": "user", "content": "我以后早餐不吃面包了，改吃燕麦。"}],
-        "user_id": "user_123"
+        "device_uuid": "dev-001",
+        "voiceprint_id": "user-A"
       }
     }
     ```
 
-4. **MCP Server**: 提取事实 "早餐偏好改为燕麦"，存储并关联时间戳。
+4. **MCP Server**: 提取事实 "早餐偏好改为燕麦"，存储在 dev-001 空间下，标记为 user-A。
 5. **Agent (回复)**: "好的，已记下您早餐改吃燕麦了。"
 
-#### 场景：后续查询
+#### 场景：后续查询（带声纹ID）
 
-1. **用户**: "我早餐一般吃什么？"
+1. **用户**: "我早餐一般吃什么？" (Device: dev-001, Voice: user-A)
 2. **Agent (思考)**: 需要查询用户的早餐偏好。
 3. **Agent (调用工具)**:
 
@@ -179,12 +191,13 @@ sequenceDiagram
       "name": "search_memory",
       "arguments": {
         "query": "早餐偏好",
-        "user_id": "user_123"
+        "device_uuid": "dev-001",
+        "voiceprint_id": "user-A"
       }
     }
     ```
 
-4. **MCP Server**: 返回 `[{ "memory": "早餐偏好改为燕麦", ... }]`
+4. **MCP Server**: 返回 `[{ "memory": "早餐偏好改为燕麦", "metadata": { "voiceprint_id": "user-A" } }]`
 5. **Agent (回复)**: "根据您的记录，您现在早餐习惯吃燕麦。"
 
 ## 5. 部署与配置
@@ -222,7 +235,7 @@ MCP Server 使用标准的 JSON-RPC 错误码，并扩展了自定义错误：
 
 **常见错误修复**:
 
-* `ValidationError: user_id`: 确保 `user_id` 是 `arguments` 的直接属性，而不是在 `metadata` 对象内。
+* `ValidationError: device_uuid`: 确保 `device_uuid` 是 `arguments` 的直接属性，且不为空。
 
 ## 7. 客户端实现参考
 
