@@ -45,8 +45,8 @@ uv run --directory app python ../test_llm_with_mcp_tools.py
 
 ## 📚 文档
 
-- [**使用指南 (SIMPLIFIED_MCP_SERVER_GUIDE.md)**](./SIMPLIFIED_MCP_SERVER_GUIDE.md): 详细的 API 文档和使用说明。
-- [**测试报告 (FINAL_TEST_REPORT.md)**](./FINAL_TEST_REPORT.md): 最近一次的功能验证报告。
+- [**集成指南 (MCP_INTEGRATION_GUIDE.md)**](./MCP_INTEGRATION_GUIDE.md): 面向智能体开发者的完整集成参考，包含架构图、API 定义和 System Prompt 示例。
+- [**测试脚本**](./test_llm_with_mcp_tools.py): 包含完整的客户端实现代码，可作为开发参考。
 
 ## 🛠️ 工具列表
 
@@ -65,5 +65,5 @@ uv run --directory app python ../test_llm_with_mcp_tools.py
 │   └── pyproject.toml        # 依赖管理
 ├── docker-compose.mcp-http.yml # Docker Compose 配置
 ├── test_llm_with_mcp_tools.py  # LLM 集成测试脚本
-└── SIMPLIFIED_MCP_SERVER_GUIDE.md # 使用指南
+└── MCP_INTEGRATION_GUIDE.md # 集成指南
 ```
