@@ -7,12 +7,13 @@ import asyncio
 import time
 import httpx
 import statistics
+import argparse
 from typing import List, Dict, Any
 
 
 class ConcurrencyTester:
-    def __init__(self, base_url: str = "http://localhost:8001"):
-        self.base_url = base_url
+    def __init__(self, host: str = "localhost", port: int = 8001):
+        self.base_url = f"http://{host}:{port}"
         self.request_id = 0
     
     def _next_id(self) -> int:
@@ -81,13 +82,13 @@ class ConcurrencyTester:
             return response.json()
 
 
-async def test_concurrent_writes(num_requests: int = 10):
+async def test_concurrent_writes(num_requests: int = 10, host: str = "localhost", port: int = 8001):
     """Test concurrent write operations"""
     print(f"\n{'='*60}")
     print(f"Test: {num_requests} Concurrent Write Operations")
     print(f"{'='*60}\n")
     
-    tester = ConcurrencyTester()
+    tester = ConcurrencyTester(host, port)
     
     # Create concurrent tasks
     tasks = [
@@ -131,13 +132,13 @@ async def test_concurrent_writes(num_requests: int = 10):
     return results
 
 
-async def test_concurrent_reads(num_requests: int = 20):
+async def test_concurrent_reads(num_requests: int = 20, host: str = "localhost", port: int = 8001):
     """Test concurrent read operations"""
     print(f"\n{'='*60}")
     print(f"Test: {num_requests} Concurrent Read Operations")
     print(f"{'='*60}\n")
     
-    tester = ConcurrencyTester()
+    tester = ConcurrencyTester(host, port)
     
     # Create concurrent tasks
     tasks = [
@@ -181,13 +182,13 @@ async def test_concurrent_reads(num_requests: int = 20):
     return results
 
 
-async def test_mixed_workload(num_writes: int = 10, num_reads: int = 30):
+async def test_mixed_workload(num_writes: int = 10, num_reads: int = 30, host: str = "localhost", port: int = 8001):
     """Test mixed read/write workload"""
     print(f"\n{'='*60}")
     print(f"Test: Mixed Workload ({num_writes} writes + {num_reads} reads)")
     print(f"{'='*60}\n")
     
-    tester = ConcurrencyTester()
+    tester = ConcurrencyTester(host, port)
     
     # Create mixed tasks
     write_tasks = [
@@ -230,13 +231,13 @@ async def test_mixed_workload(num_writes: int = 10, num_reads: int = 30):
     return results
 
 
-async def stress_test(duration_seconds: int = 10):
+async def stress_test(duration_seconds: int = 10, host: str = "localhost", port: int = 8001):
     """Run continuous stress test for specified duration"""
     print(f"\n{'='*60}")
     print(f"Stress Test: Continuous Load for {duration_seconds}s")
     print(f"{'='*60}\n")
     
-    tester = ConcurrencyTester()
+    tester = ConcurrencyTester(host, port)
     
     request_count = 0
     errors = 0
@@ -294,26 +295,27 @@ async def stress_test(duration_seconds: int = 10):
     print(f"  Avg Response Time: {health['metrics']['avg_response_time_ms']:.0f}ms")
 
 
-async def main():
+async def main(host: str = "localhost", port: int = 8001):
     """Run all concurrency tests"""
     print("\n" + "="*60)
     print("MCP Server Concurrency Tests")
+    print(f"Target: http://{host}:{port}")
     print("="*60)
     
     # Test 1: Concurrent writes
-    await test_concurrent_writes(num_requests=10)
+    await test_concurrent_writes(num_requests=10, host=host, port=port)
     await asyncio.sleep(1)
     
     # Test 2: Concurrent reads
-    await test_concurrent_reads(num_requests=20)
+    await test_concurrent_reads(num_requests=20, host=host, port=port)
     await asyncio.sleep(1)
     
     # Test 3: Mixed workload
-    await test_mixed_workload(num_writes=10, num_reads=30)
+    await test_mixed_workload(num_writes=10, num_reads=30, host=host, port=port)
     await asyncio.sleep(1)
     
     # Test 4: Stress test
-    await stress_test(duration_seconds=10)
+    await stress_test(duration_seconds=10, host=host, port=port)
     
     print("\n" + "="*60)
     print("All Tests Completed!")
@@ -321,4 +323,11 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Test MCP server concurrency")
+    parser.add_argument("--host", default="localhost", help="MCP server host (default: localhost)")
+    parser.add_argument("--port", type=int, default=8001, help="MCP server port (default: 8001)")
+    
+    args = parser.parse_args()
+    
+    asyncio.run(main(args.host, args.port))
